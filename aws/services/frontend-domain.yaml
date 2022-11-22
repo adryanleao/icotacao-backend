@@ -1,0 +1,14 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Static domain hosting with S3 and CloudFront'
+Resources:
+  Domain:
+    Type: AWS::Route53::RecordSet
+    Properties:
+        HostedZoneId: !ImportValue Zone
+        Name: !Ref Zone
+        Type: CNAME
+        ResourceRecords:
+        - !ImportValue AppCloudfrontDomain
+        TTL: 1
+
+  

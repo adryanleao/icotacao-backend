@@ -1,0 +1,28 @@
+version: "3.7"
+services:
+  api:
+    image: 343271181431.dkr.ecr.us-east-1.amazonaws.com/icotacao-backend-api:master
+    ports:
+      - 4131:4131
+    environment:
+      VIRTUAL_HOST: api.icotacao.com.br
+      LETSENCRYPT_HOST: api.icotacao.com.br
+      VIRTUAL_PORT: 4131
+      DB_WAIT: 60s
+      DB_MIGRATE: "true"
+      DB_USER: root
+      DB_PASS: Ux8ExxKwN6TZ
+      DB_HOST: autoconect_mysql
+      DB_PORT: 3306
+      DB_NAME: icotacao
+      CACHE_REDIS_HOST: autoconect_redis
+      CACHE_REDIS_PORT: 6379
+      CACHE_TYPE: redis
+      SITE_HTTPS: "https://icotacao.com.br"
+      PORT: 4131
+    networks:
+      - autoconect
+
+networks:
+  autoconect:
+    external: true

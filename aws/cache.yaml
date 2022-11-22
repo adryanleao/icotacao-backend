@@ -1,0 +1,50 @@
+Description: Redis ElastiCache
+
+Resources:
+  ElastiCacheSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: ElastiCache Security Group
+      SecurityGroupIngress:
+        - CidrIp: 10.0.0.0/8
+          FromPort: 6379
+          IpProtocol: tcp
+          ToPort: 6379
+      VpcId: !ImportValue VpcId
+
+  ElastiCacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: ElastiCache Subnet
+      SubnetIds:
+      - !ImportValue PrivateSubnetOne
+      - !ImportValue PrivateSubnetTwo
+
+  ElasticacheCluster:
+    Type: 'AWS::ElastiCache::CacheCluster'
+    Properties:
+      AutoMinorVersionUpgrade: true
+      Engine: redis
+      Port: 6379
+      PreferredMaintenanceWindow: 'sun:03:00-sun:04:00'
+      CacheNodeType: cache.t2.medium
+      NumCacheNodes: '1'
+      VpcSecurityGroupIds: [!Ref ElastiCacheSecurityGroup]
+      CacheSubnetGroupName: !Ref ElastiCacheSubnetGroup
+
+  ElastiCacheDomain:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue Zone
+      Name: !Join ['.', ['cache', !ImportValue Domain]]
+      Type: CNAME
+      ResourceRecords:
+        - !GetAtt ElasticacheCluster.RedisEndpoint.Address
+      TTL: 3600
+
+Outputs:
+  ElastiCacheEndpoint:
+    Description: DNS for the Elasticache Cluster
+    Value: !Ref ElastiCacheDomain
+    Export:
+      Name: ElastiCacheEndpoint

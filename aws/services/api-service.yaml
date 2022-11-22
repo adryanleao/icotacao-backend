@@ -1,0 +1,207 @@
+Description: Api Service
+
+Parameters:
+  ImageTag:
+    Type: String
+    Description: Tag do container
+
+Resources:
+
+  ApiDomain:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue Zone
+      Name: !Join ['.', [api, !ImportValue Domain]]
+      Type: CNAME
+      ResourceRecords:
+        - !ImportValue ApplicationLoadBalancerCustomDns
+      TTL: 3600
+
+  HttpsListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: TargetGroup
+      Conditions:
+        - Field: host-header
+          Values:
+            - !Join ['.', [api, !ImportValue Domain]]
+      ListenerArn: !ImportValue HttpsListener
+      Priority: 2
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 60
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 30
+      HealthyThresholdCount: 2
+      HealthCheckPath: /auth/health
+      Matcher:
+        HttpCode: 200
+      UnhealthyThresholdCount: 3
+      Port: 80
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 30
+        - Key: load_balancing.algorithm.type
+          Value: least_outstanding_requests
+      TargetType: ip
+      VpcId: !ImportValue VpcId
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !ImportValue Cluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      HealthCheckGracePeriodSeconds: 100
+      LoadBalancers:
+        - ContainerName: web-server
+          ContainerPort: 80
+          TargetGroupArn: !Ref TargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+            - !ImportValue ContainerSecurityGroup
+          Subnets:
+            - !ImportValue PrivateSubnetOne
+            - !ImportValue PrivateSubnetTwo
+      TaskDefinition: !Ref ServiceTaskDefinition
+
+  ServiceTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+        - Environment:
+            - Name: SITE_HTTPS
+              Value: !Join ['', ['https://', api, '.' ,!ImportValue Domain]]
+            - Name: APP_ENV
+              Value: 'production'
+            - Name: PORT
+              Value: 80
+            - Name: DB_USER
+              Value: root
+            - Name: DB_PASS
+              Value: drSpNkkDTBkY
+            - Name: DB_HOST
+              Value: plantaoextra.co9nrzkhdink.us-east-1.rds.amazonaws.com
+            - Name: DB_NAME
+              Value: econstrucao
+            - Name: FLASK_SKIP_DOTENV
+              Value: 1
+            - Name: DB_MIGRATE
+              Value: 1
+          Essential: true
+          Image: !Join [':', ['ghcr.io/thinkideaapp/econstrucao-backend/econstrucao-api', !Ref ImageTag]]
+          RepositoryCredentials:
+            CredentialsParameter: !ImportValue GithubSecret
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: task
+          Name: web-server
+          PortMappings:
+            - ContainerPort: 80
+          Privileged: 'false'
+      Cpu: 512
+      Memory: 1024
+      Family: Api
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !ImportValue ECSTaskExecutionRoleArn
+      TaskRoleArn: !ImportValue ECSTaskExecutionRoleArn
+      RequiresCompatibilities: [FARGATE]
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 3
+
+  ScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: 3
+      MinCapacity: 1
+      ResourceId: !Join ['/', [service, !ImportValue Cluster, !GetAtt [Service, Name]]]
+      RoleARN: !ImportValue ScalableRole
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  HighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref ScaleUpPolicy
+      AlarmDescription: High CPU alarm for Api
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ClusterName
+          Value: !ImportValue Cluster
+        - Name: ServiceName
+          Value: !GetAtt [Service, Name]
+      EvaluationPeriods: 1
+      MetricName: CPUUtilization
+      Namespace: AWS/ECS
+      Period: 60
+      Statistic: Average
+      Threshold: 60
+
+  ScaleUpPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scaleup
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ScalableTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        StepAdjustments:
+          - MetricIntervalLowerBound: 0
+            MetricIntervalUpperBound: !Ref 'AWS::NoValue'
+            ScalingAdjustment: 1
+
+  LowCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref ScaleDownPolicy
+      AlarmDescription: Low CPU alarm for Api
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: ClusterName
+          Value: !ImportValue Cluster
+        - Name: ServiceName
+          Value: !GetAtt [Service, Name]
+      EvaluationPeriods: 3
+      MetricName: CPUUtilization
+      Namespace: AWS/ECS
+      Period: 60
+      Statistic: Average
+      Threshold: 30
+
+  ScaleDownPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: scaledown
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ScalableTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        StepAdjustments:
+          - MetricIntervalLowerBound: !Ref 'AWS::NoValue'
+            MetricIntervalUpperBound: 0
+            ScalingAdjustment: -1
+
+Outputs:
+
+  ApiEndpoint:
+    Description: Endpoint for api
+    Value: !Join ['', ['https://', api, '.' ,!ImportValue Domain]]
+    Export:
+      Name: ApiEndpoint

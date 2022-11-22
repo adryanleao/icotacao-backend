@@ -1,0 +1,115 @@
+Description: Bastion Host for VPC on Fargate
+
+Resources:
+
+  Domain:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue Zone
+      Name: !Join ['.', ['bastion', !ImportValue Domain]]
+      Type: A
+      ResourceRecords:
+        - 8.8.8.8 # Create the DNS pointing to an invalid IP address. We will update it on the DNS Propagator container.
+      TTL: 600
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !ImportValue Cluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref ServiceTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: [!Ref BastionSecurityGroup]
+          Subnets:
+            - !ImportValue PublicSubnetOne
+            - !ImportValue PublicSubnetTwo
+
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH connection into the VPC
+      VpcId: !ImportValue VpcId
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  ServiceTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      ContainerDefinitions:
+        - Environment:
+            - Name: AUTHORIZED_KEYS
+              Value: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDNDFHhS2D1lTI02mXY9lUrUix3P+SVYhEteYlOWbACG4SiDt85ksWNXG0hFORuE3oybC7IBmpaFg2Pn0dTX+FZEEUo6oyfzvixYnwkJNvKpk+zOc638kgclrO8lE7VuNKGFIjXiOVFkf9xoyjigpmmkrFNuxyZMcIuUYcqj4zNvSdEMMlEwNZr++hlXgxYYB2QnPJvKSSOFBb7icM0FmSbhRPtKGOsI3p9PuxzzhbTQ988iD8p8CW5yTO8d7tdTpfKf1rzcG1dIKRiKpj7sST1FROKUmRa0FW2lqnK7BmSAu9wrKSCUQlWZOv2GCqUOGG7Eob72OpT/TrkQSixreo+6RhR9sS7xCqx5391S5qfIZgNeHYwOVK9GUYjk2ekKtHBzQohsDhmF9Y5+3eBUJOUSX0oYueN9sytruPm0Fe7clChrDj6Cf74Cp7Iw9n9MTyRQiXpP551oY45BJUj/bjw0qdRR55uIYFCnOh6V4rp2gQvZfOHQybddwxrTeh6xy8= keviocastro@MacBook-Pro-de-Rafael.local
+          Essential: true
+          Image: deleugpn/openssh:1.0
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: task
+          Name: bastion
+          PortMappings:
+            - ContainerPort: 22
+          Privileged: 'false'
+
+        - Environment:
+            - Name: DOMAIN
+              Value: meusocialpost.app
+            - Name: HOSTED_ZONE
+              Value: !ImportValue Zone
+          Essential: false
+          Image: deleugpn/dns-propagator:1.0
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: task
+          Name: dns-propagator
+          Privileged: 'false'
+      Cpu: 256
+      Memory: 512
+      Family: bastion
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !GetAtt BastionTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt BastionTaskExecutionRole.Arn
+      RequiresCompatibilities: [FARGATE]
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 30
+
+  BastionTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: BastionPermissions
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - route53:ChangeResourceRecordSets
+                Resource:
+                  - '*'
+
+Outputs:
+  BastionEndpoint:
+    Description: Endpoint for bastion
+    Value: !Ref Domain
+    Export:
+      Name: BastionEndpoint

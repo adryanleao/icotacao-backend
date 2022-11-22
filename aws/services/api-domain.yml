@@ -1,0 +1,19 @@
+Description: Customer Service API domain
+
+Resources:
+  APIDomain:
+    Type: AWS::Route53::RecordSet
+    Properties:
+        HostedZoneId: !ImportValue Zone
+        Name: !Join [".", [api, !ImportValue Domain]]
+        Type: CNAME
+        ResourceRecords:
+        - !ImportValue ApplicationLoadBalancerCustomDns
+        TTL: 3600
+
+Outputs:
+  APIDomain:
+    Description: Domain for Customer Service API
+    Value: !Ref APIDomain
+    Export:
+      Name: APIDomain

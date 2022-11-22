@@ -1,0 +1,16 @@
+Description: General Purpose for ECS Cluster
+
+Resources:
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+Outputs:
+  Cluster:
+    Description: ECS Cluster for general use
+    Value: !Ref Cluster
+    Export:
+      Name: Cluster

@@ -1,0 +1,62 @@
+Description: Generic AWS Roles for the Account
+
+Resources:
+
+  ScalableRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: application-autoscaling.amazonaws.com
+          Action:
+            - sts:AssumeRole
+      Policies:
+        - PolicyName: ScalablePermissions
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - application-autoscaling:*
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:PutMetricAlarm
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                Resource:
+                  - '*'
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: ecs-tasks.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole
+      Policies:
+        - PolicyName: ECSTaskExecutionPermissions
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Resource: ['*']
+                Action:
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:ListSecrets
+                  - secretsmanager:ListSecretVersionIds                  
+Outputs:
+  ScalableRole:
+    Description: Scalable Role for ECS Services
+    Value: !GetAtt ScalableRole.Arn
+    Export:
+      Name: ScalableRole
+  ECSTaskExecutionRole:
+    Description: IAM Role for ECS Task Execution
+    Value: !GetAtt ECSTaskExecutionRole.Arn
+    Export:
+      Name: ECSTaskExecutionRoleArn

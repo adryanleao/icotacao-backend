@@ -1,0 +1,78 @@
+Description: RDS Aurora Cluster
+
+Parameters:
+  AuroraPassword:
+    MinLength: 16
+    Type: String
+
+Resources:
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Aurora Mysql Security Group
+      SecurityGroupIngress:
+        - CidrIp: 10.0.0.0/8
+          FromPort: 3306
+          IpProtocol: tcp
+          ToPort: 3306
+      VpcId: !ImportValue VpcId
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Aurora Mysql Subnet
+      SubnetIds:
+        - !ImportValue PrivateSubnetOne
+        - !ImportValue PrivateSubnetTwo
+
+  DatabaseCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora
+      EngineMode: serverless
+      EngineVersion: 5.6.10a
+      MasterUsername: master
+      MasterUserPassword: !Ref AuroraPassword
+      DatabaseName:  marketplace
+      BackupRetentionPeriod: 3
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      DBClusterParameterGroupName: default.aurora5.6
+      DeletionProtection: false
+      StorageEncrypted: true
+      VpcSecurityGroupIds: [!Ref DatabaseSecurityGroup]
+      ScalingConfiguration:
+        AutoPause: false
+        MaxCapacity: 16
+        MinCapacity: 2
+        SecondsUntilAutoPause: 1200
+
+  DatabaseDomain:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !ImportValue Zone
+      Name: !Join ['.', ['aurora', !ImportValue Domain]]
+      Type: CNAME
+      ResourceRecords:
+        - !GetAtt DatabaseCluster.Endpoint.Address
+      TTL: 3600
+
+Outputs:
+  
+  AuroraEndpoint:
+    Description: Endpoint for aurora RDS
+    Value: !Ref DatabaseDomain
+    Export:
+      Name: 'AuroraEndpoint'
+
+  AuroraUserName:
+    Description: Username for aurora RDS
+    Value: master
+    Export:
+      Name: 'AuroraUserName'
+
+  AuroraPassword:
+    Description: Pass for aurora RDS
+    Value: !Ref AuroraPassword
+    Export:
+      Name: 'AuroraPassword'

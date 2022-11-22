@@ -1,0 +1,21 @@
+Description: AWS Route 53 Hosted Zone
+
+Resources:
+  Zone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: econstrucoes.com
+
+Outputs:
+  Zone:
+    Description: Hosted Zone
+    Value: !Ref Zone
+    Export:
+      Name: Zone
+  Domain:
+    Description: Hosted Zone
+    Value: econstrucoes.com
+    Export:
+      Name: Domain
+
+

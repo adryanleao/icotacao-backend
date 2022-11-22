@@ -1,0 +1,28 @@
+version: "3.7"
+services:
+  api:
+    image: 343271181431.dkr.ecr.us-east-1.amazonaws.com/icotacao-backend-api:master
+    build: .
+    ports:
+      - ${PORT}:${PORT}
+      - 5679:5678
+    volumes:
+      - ./:/app
+    depends_on:
+      - mysql
+      - redis
+    env_file: .env
+  mysql:
+    image: mysql:5.6
+    ports:
+      - ${DB_PORT}:${DB_PORT}
+    volumes:
+      - ./initdb/dumps:/docker-entrypoint-initdb.d
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: sensi_db_init
+    env_file: .env
+  redis:
+    image: redis
+    ports:
+      - 6380:6379
