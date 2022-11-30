@@ -87,7 +87,8 @@ def create_quote(schema=None):
     item = get_quote(item.id, schema)
 
     # SEND EMAILS AND NOTIFICATIONS
-    send_to_providers_email_notification(item)
+    if item["status"] != 0:
+        send_to_providers_email_notification(item)
 
     return item
 
@@ -122,6 +123,10 @@ def update_quote(id, schema=None):
 
     if schema:
         item = QuoteSchema().dump(item)
+        # SEND EMAILS AND NOTIFICATIONS
+        if item["status"] != 0:
+            send_to_providers_email_notification(item)
+            
     return item
 
 
